@@ -1,381 +1,97 @@
-# Hackathon BFF — API Reference
+# TrendSocial API
 
-Split Payment + Friends + Order detail BFF.
+Base URL (Render): `https://hackathon-dkpy.onrender.com`
+Base URL (Local):  `http://localhost:8080`
 
-**Production base URL ayrımı (MultiDC remote-config anahtarları):**
-- `AndroidSplitPaymentBaseUrl` → `/split-payment/*`
-- `AndroidFriendsBaseUrl` → `/friends/*`
+OpenAPI: [`openapi.yaml`](./openapi.yaml) — Swagger UI: [`swagger.html`](./swagger.html)
 
-Hackathon implementasyonunda her iki BFF aynı Ktor sunucusunda farklı prefix'ler altında host ediliyor.
+## Auth
 
-**Base URL (local dev):** `http://localhost:8080`
+Tüm endpoint'ler (login/register hariç) `Authorization: Bearer <token>` ister.
 
-**Auth shim:** `X-User-Id` header — gerçek production'da JWT'den çıkarılır.
-
----
-
-## İçindekiler
-
-- [Health](#health)
-- [Split Payment](#split-payment)
-  - [POST /split-payment/initiate](#11-post-split-paymentinitiate)
-  - [POST /split-payment/initiator-pay/{splitId}](#12-post-split-paymentinitiator-paysplitid)
-  - [GET /split-payment/request/{splitId}/{participantId}](#13-get-split-paymentrequestsplitidparticipantid)
-  - [POST /split-payment/reject/{splitId}](#14-post-split-paymentrejectsplitid)
-  - [GET /split-payment/{splitId}](#15-get-split-paymentsplitid)
-  - [POST /split-payment/{splitId}/remind/{participantId}](#16-post-split-paymentsplitidremindparticipantid)
-  - [POST /split-payment/{splitId}/cancel](#17-post-split-paymentsplitidcancel)
-- [Friends](#friends)
-  - [GET /friends](#21-get-friends)
-  - [POST /friends/add](#22-post-friendsadd)
-  - [DELETE /friends/{friendId}](#23-delete-friendsfriendid)
-- [Orders](#orders)
-  - [GET /orders/{id}](#3-get-ordersid)
-- [Items](#items)
-- [Ortak Tipler](#ortak-tipler)
-- [Hata Modeli](#hata-modeli)
-
----
-
-## Health
-
-### `GET /health`
-
-Liveness probe.
-
-**Response 200**
-```json
-{ "status": "ok" }
-```
-
----
-
-## Split Payment
-
-### 1.1 `POST /split-payment/initiate`
-
-Initiator checkout'ta "Ortak Öde"'yi seçip katılımcıları belirledikten sonra çağırır. Server `splitId` döner.
-
-**Validation**
-- Tam olarak 1 katılımcı `isInitiator=true` olmalı
-- `participants[].shareKurus` toplamı `totalKurus`'a eşit olmalı (hem EQUAL hem CUSTOM modunda doğrulanır)
-- `participantId` listesinde duplicate olmamalı
-
-**Request body** — `InitiateSplitRequestDto`
-```json
-{
-  "totalKurus": 12000,
-  "splitMethod": "EQUAL",
-  "participants": [
-    { "participantId": "u_self", "shareKurus": 4000, "isInitiator": true },
-    { "participantId": "u_42",   "shareKurus": 4000, "isInitiator": false },
-    { "participantId": "u_99",   "shareKurus": 4000, "isInitiator": false }
-  ]
-}
-```
-
-**Response 201**
-```json
-{ "splitId": "sp_8f3c7ab2" }
-```
-
-**Errors:** `400 VALIDATION`
-
----
-
-### 1.2 `POST /split-payment/initiator-pay/{splitId}`
-
-Initiator checkout'u tamamlayıp gerçek `orderId` aldıktan sonra çağırır. Server payı kilitler (PAID), katılımcılara push/sms gönderir ve tracking deeplink'i döner. `orders.split_id` da denormalize olarak set edilir (sipariş detay chip'i için).
-
-**Path params**
-| name | type | example |
+| Method | Path | Desc |
 |---|---|---|
-| `splitId` | string | `sp_8f3c7ab2` |
+| POST | `/auth/login` | E-posta + şifre ile giriş, token döner |
+| POST | `/auth/register` | Yeni kullanıcı oluştur, token döner (201) |
+| GET  | `/auth/profile` | Mevcut kullanıcı profilini döndür |
+| PUT  | `/auth/profile` | Profil günceller (name, email, avatar_url) |
 
-**Request body** — `InitiatorPayRequestDto`
-```json
-{ "orderId": "ORD-7700219" }
-```
+## Products
 
-**Response 200**
-```json
-{ "trackingDeeplink": "ty://?Page=OrtakOdemeTakip&SplitId=sp_8f3c7ab2" }
-```
-
-**Errors:** `400 VALIDATION`, `404 NOT_FOUND`
-
----
-
-### 1.3 `GET /split-payment/request/{splitId}/{participantId}`
-
-Katılımcı request ekranı için detay.
-
-**Path params**
-| name | type | example |
+| Method | Path | Desc |
 |---|---|---|
-| `splitId` | string | `sp_8f3c7ab2` |
-| `participantId` | string | `u_42` |
-
-**Response 200** — `SplitPaymentRequestResponseDto`
-```json
-{
-  "splitId": "sp_8f3c7ab2",
-  "participantId": "u_42",
-  "initiatorName": "Berna T.",
-  "shareKurus": 4000,
-  "totalKurus": 12000,
-  "splitMethod": "EQUAL",
-  "status": "PENDING",
-  "products": [
-    { "productId": "p_1", "name": "Saat", "imageUrl": null, "priceKurus": 12000 }
-  ]
-}
-```
-
-**Errors:** `404 NOT_FOUND`
-
----
-
-### 1.4 `POST /split-payment/reject/{splitId}`
-
-Katılımcı payment-request ekranından veya tracking ekranından kendi payını reddeder.
-
-> PAID statüsündeki katılımcı reject yapamaz (400).
-
-**Path params:** `splitId`
-**Headers:** `X-User-Id: u_42`
-
-**Response 204** — No content
-**Errors:** `400 VALIDATION`, `404 NOT_FOUND`
-
----
-
-### 1.5 `GET /split-payment/{splitId}`
-
-Tracking — Bekleme Odası (20s polling).
-`role` viewer'a göre `INITIATOR` / `PARTICIPANT` döner.
-`expiresAtMillis` mutlak epoch ms (process death dirençli).
-
-**Path params:** `splitId`
-**Headers:** `X-User-Id: u_self`
-
-**Response 200** — `SplitPaymentTrackingDto`
-```json
-{
-  "splitId": "sp_8f3c7ab2",
-  "role": "INITIATOR",
-  "overallStatus": "WAITING",
-  "expiresAtMillis": 1731000000000,
-  "totalKurus": 12000,
-  "yourShareKurus": 4000,
-  "initiator": { "name": "Berna T.", "initials": "BT" },
-  "participants": [
-    { "id": "u_42", "name": "Ali Y.", "initials": "AY", "status": "PENDING", "amountKurus": 4000 },
-    { "id": "u_99", "name": "Mert K.", "initials": "MK", "status": "PAID",    "amountKurus": 4000 }
-  ],
-  "products": [
-    { "productId": "p_1", "name": "Saat", "imageUrl": null, "priceKurus": 12000 }
-  ]
-}
-```
-
-**Errors:** `404 NOT_FOUND`
-
----
-
-### 1.6 `POST /split-payment/{splitId}/remind/{participantId}`
-
-Initiator katılımcıya hatırlatma push'ı yollar.
-
-> Sadece `PENDING` statüdeki katılımcılar hatırlatılabilir.
-
-**Path params:** `splitId`, `participantId`
-
-**Response 204** — No content
-**Errors:** `400 VALIDATION`, `404 NOT_FOUND`
-
----
-
-### 1.7 `POST /split-payment/{splitId}/cancel`
-
-Initiator split'i iptal eder. Polling iptal edilmeli, ekran kapatılmalı.
-
-> Zaten `CANCELLED` / `COMPLETED` / `EXPIRED` olan split tekrar iptal edilemez (400).
-
-**Path params:** `splitId`
-
-**Response 204** — No content
-**Errors:** `400 VALIDATION`, `404 NOT_FOUND`
-
----
+| GET  | `/products` | Tüm ürünler (is_favorite alanı kullanıcıya göre) |
+| GET  | `/products/{id}` | Tek ürün |
+| GET  | `/products/search?q=...` | Ad/marka içinde arama |
+| GET  | `/products/favorites` | Kullanıcının favori ürünleri |
+| PUT  | `/products/{id}/favorite` | Favori toggle (yoksa ekle, varsa çıkar) |
+| PUT  | `/products/{id}/like` | `{"status":"liked"|"disliked"|"none"}` ile beğen/dislike |
 
 ## Friends
 
-### 2.1 `GET /friends`
+| Method | Path | Desc |
+|---|---|---|
+| GET    | `/friends` | Arkadaş listesi |
+| POST   | `/friends` | `{"friend_id":"usr_..."}` — bidirectional kayıt (201) |
+| DELETE | `/friends/{id}` | Bidirectional sil (204) |
+| POST   | `/friends/sync` | `{"contact_emails":[...]}` — eşleşen kullanıcıları arkadaş ekler |
 
-Arkadaş listesi.
+## Collections
 
-**Headers:** `X-User-Id: u_self`
+| Method | Path | Desc |
+|---|---|---|
+| GET  | `/collections` | Sahip olunan + katılınan koleksiyonlar |
+| POST | `/collections` | Yeni koleksiyon (201) — `{name, description?, image_name?, product_ids?, is_shared?}` |
+| GET  | `/collections/{id}` | Detay (products + participants) |
+| POST | `/collections/{id}/share` | `{"friend_ids":[...]}` ile paylaş, is_shared=true yapar |
 
-**Response 200** — `FriendsListResponseDto`
-```json
-{
-  "friends": [
-    {
-      "id": "u_42",
-      "name": "Ali Yılmaz",
-      "email": "ali@example.com",
-      "initials": "AY",
-      "avatarUrl": null
-    }
-  ]
-}
-```
+## Cart
 
----
-
-### 2.2 `POST /friends/add`
-
-E-posta ile arkadaş ekle.
-
-> Hata durumunda response body **`FriendsErrorResponseDto`** formatındadır (genel `ErrorResponse` değil). Client `errorCode` set'ini sealed `FriendsError` tipine maple eder.
-
-**Headers:** `X-User-Id: u_self`
-
-**Request body** — `AddFriendRequestDto`
-```json
-{ "email": "yeni@example.com" }
-```
-
-**Response 200** — `AddFriendResponseDto`
-```json
-{
-  "friend": {
-    "id": "u_123",
-    "name": "Yeni Kullanıcı",
-    "email": "yeni@example.com",
-    "initials": "YK",
-    "avatarUrl": null
-  }
-}
-```
-
-**Hata kodları**
-
-| `errorCode`      | HTTP | Anlamı                              |
-|------------------|------|-------------------------------------|
-| `INVALID_EMAIL`  | 400  | Geçersiz e-posta formatı            |
-| `SELF_ADD`       | 400  | Kendini eklemeye çalıştı            |
-| `USER_NOT_FOUND` | 404  | E-postaya karşılık kullanıcı yok    |
-| `ALREADY_FRIEND` | 409  | Zaten arkadaş listesinde            |
-
-**Hata response (örnek)**
-```json
-{ "errorCode": "USER_NOT_FOUND", "message": "Kullanıcı bulunamadı." }
-```
-
----
-
-### 2.3 `DELETE /friends/{friendId}`
-
-Arkadaşı sil (bidirectional — her iki yönlü edge silinir).
-
-**Path params:** `friendId` (örn. `u_42`)
-**Headers:** `X-User-Id: u_self`
-
-**Response 204** — No content
-**Errors:** `404 NOT_FOUND`
-
----
+| Method | Path | Desc |
+|---|---|---|
+| GET    | `/cart` | Sepet (items + total_price + item_count) |
+| POST   | `/cart/items` | Ekle (201) — `{product_id, size, quantity?}`. Aynı (product_id+size) varsa miktar artar. |
+| PUT    | `/cart/items/{id}` | Miktar güncelle — `{quantity}` |
+| DELETE | `/cart/items/{id}` | Sil (204) |
 
 ## Orders
 
-### 3 `GET /orders/{id}`
-
-Sipariş detayı. **Yeni alan: `paymentInfo.splitId`** (opsiyonel, nullable, default null). Split kapsamında oluşturulmuş siparişlerde dolu döner; client `ty://?Page=OrtakOdemeTakip&SplitId=<id>&OrderId=<orderId>` deeplink'i ile chip render eder. Geriye dönük uyumlu.
-
-**Path params:** `id` (örn. `ORD-7700219`)
-
-**Response 200** — `OrderDetailDto`
-```json
-{
-  "id": "ORD-7700219",
-  "paymentInfo": {
-    "cardImageUrl": null,
-    "paymentDescription": null,
-    "totalPrice": "120,00 TL",
-    "paymentItems": [],
-    "paymentType": "CREDIT_CARD",
-    "cobrandedRewardInfo": null,
-    "isCargoBundleUsed": false,
-    "umicoInfoItems": [],
-    "splitId": "sp_8f3c7ab2"
-  }
-}
-```
-
-**Errors:** `404 NOT_FOUND`
-
----
-
-## Items
-
-Mevcut item CRUD (orijinal scope).
-
-| Method | Path | Açıklama |
+| Method | Path | Desc |
 |---|---|---|
-| `GET` | `/items` | Liste |
-| `POST` | `/items` | Oluştur |
-| `GET` | `/items/{id}` | Tekil |
-| `PUT` | `/items/{id}` | Güncelle |
-| `DELETE` | `/items/{id}` | Sil |
+| GET  | `/orders` | Sipariş geçmişi |
+| POST | `/orders` | Sipariş oluştur (201) — `{cart_item_ids?}` boş ise tüm sepet kullanılır |
+| POST | `/orders/split` | Ortak ödemeli sipariş (201) — `{cart_item_ids?, friend_ids:[...]}` |
+| GET  | `/orders/{id}` | Detay (items + split_participants) |
+| GET  | `/orders/{id}/split-status` | Ortak ödeme durumu (paid_amount, remaining, all_paid) |
 
-**Item şeması**
-```json
-{ "id": "string?", "name": "string", "description": "string?" }
-```
+## Misc
 
----
-
-## Ortak Tipler
-
-### Enums
-
-| Enum | Değerler |
-|---|---|
-| `SplitMethod` | `EQUAL`, `CUSTOM` |
-| `SplitParticipantStatus` | `PENDING`, `PAID`, `REJECTED`, `EXPIRED` |
-| `SplitOverallStatus` | `WAITING`, `COMPLETED`, `EXPIRED`, `CANCELLED` |
-| `SplitRole` | `INITIATOR`, `PARTICIPANT` |
-
-### Header
-
-| Header | Required | Açıklama |
+| Method | Path | Desc |
 |---|---|---|
-| `X-User-Id` | viewer/caller olan endpointlerde | Hackathon shim — production'da JWT'den çıkarılır |
+| GET | `/health` | `{"status":"ok"}` (auth'suz) |
 
----
-
-## Hata Modeli
-
-### Genel `ErrorResponse`
-
-Friends dışındaki tüm endpoint'ler bu format ile döner:
+## Hata formatı
 
 ```json
-{ "error": "split sp_x not found", "code": "NOT_FOUND" }
+{ "error": { "code": "NOT_FOUND", "message": "Ürün bulunamadı." } }
 ```
 
-| `code` | Anlamı |
-|---|---|
-| `VALIDATION` | İstek doğrulama hatası (400) |
-| `NOT_FOUND` | Kayıt bulunamadı (404) |
-| `INTERNAL` | Sunucu hatası (500) |
+Code'lar: `UNAUTHORIZED` (401), `FORBIDDEN` (403), `NOT_FOUND` (404), `BAD_REQUEST` (400),
+`EMAIL_EXISTS` (409), `USER_NOT_FOUND` (404), `PRODUCT_NOT_FOUND` (404), `SERVER_ERROR` (500).
 
-### `FriendsErrorResponseDto`
+## Hızlı dene
 
-Sadece `/friends/*` endpoint'lerinde — bkz. [Friends 2.2 hata kodları tablosu](#22-post-friendsadd).
+```bash
+BASE=https://hackathon-dkpy.onrender.com
+TOKEN=$(curl -s -X POST $BASE/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Test","email":"smoke@test.com","password":"Sifre123!"}' | jq -r .token)
 
-```json
-{ "errorCode": "ALREADY_FRIEND", "message": "Zaten arkadaş listenizde." }
+curl -H "Authorization: Bearer $TOKEN" $BASE/products
+curl -H "Authorization: Bearer $TOKEN" $BASE/auth/profile
+```
+
+Smoke test suite:
+```bash
+BASE=$BASE ./tests/curl/run_all.sh
 ```

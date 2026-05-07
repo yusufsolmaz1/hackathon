@@ -1,28 +1,21 @@
-<!doctype html>
-<html lang="tr">
+<!DOCTYPE html>
+<html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Hackathon BFF — API Docs</title>
+  <meta charset="UTF-8" />
+  <title>TrendSocial API — Swagger UI</title>
   <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
-  <style>
-    body { margin: 0 }
-    .topbar { display: none }
-  </style>
+  <style>body { margin: 0; }</style>
 </head>
 <body>
-  <div id="swagger"></div>
+  <div id="swagger-ui"></div>
   <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
   <script>
     window.onload = () => {
       window.ui = SwaggerUIBundle({
-        url: 'openapi.yaml',
-        dom_id: '#swagger',
+        url: './openapi.yaml',
+        dom_id: '#swagger-ui',
         deepLinking: true,
-        defaultModelsExpandDepth: 1,
-        defaultModelExpandDepth: 2,
-        docExpansion: 'list',
-        tryItOutEnabled: true,
+        presets: [SwaggerUIBundle.presets.apis],
       });
     };
   </script>

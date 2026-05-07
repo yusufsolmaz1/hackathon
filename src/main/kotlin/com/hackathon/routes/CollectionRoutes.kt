@@ -2,10 +2,10 @@ package com.hackathon.routes
 
 import com.hackathon.config.TrendException
 import com.hackathon.config.requireUserId
-import com.hackathon.model.CreateOrderRequest
-import com.hackathon.model.CreateSplitOrderRequest
+import com.hackathon.model.CreateCollectionRequest
+import com.hackathon.model.ShareCollectionRequest
 import com.hackathon.repository.UserRepository
-import com.hackathon.service.OrderService
+import com.hackathon.service.CollectionService
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
@@ -14,31 +14,27 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 
-fun Route.orderRoutes(service: OrderService, userRepo: UserRepository) {
-    route("/orders") {
+fun Route.collectionRoutes(service: CollectionService, userRepo: UserRepository) {
+    route("/collections") {
         get {
             val userId = call.requireUserId(userRepo)
             call.respond(service.list(userId))
         }
         post {
             val userId = call.requireUserId(userRepo)
-            val req = call.receive<CreateOrderRequest>()
+            val req = call.receive<CreateCollectionRequest>()
             call.respond(HttpStatusCode.Created, service.create(userId, req))
-        }
-        post("/split") {
-            val userId = call.requireUserId(userRepo)
-            val req = call.receive<CreateSplitOrderRequest>()
-            call.respond(HttpStatusCode.Created, service.createSplit(userId, req))
         }
         get("/{id}") {
             val userId = call.requireUserId(userRepo)
             val id = call.parameters["id"] ?: throw TrendException.badRequest("'id' gereklidir.")
             call.respond(service.getDetail(userId, id))
         }
-        get("/{id}/split-status") {
+        post("/{id}/share") {
             val userId = call.requireUserId(userRepo)
             val id = call.parameters["id"] ?: throw TrendException.badRequest("'id' gereklidir.")
-            call.respond(service.getSplitStatus(userId, id))
+            val req = call.receive<ShareCollectionRequest>()
+            call.respond(service.share(userId, id, req))
         }
     }
 }

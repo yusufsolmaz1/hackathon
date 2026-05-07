@@ -30,12 +30,8 @@ info:
     name: TrendSocial Dev Team
 
 servers:
-  - url: https://hackathon-dkpy.onrender.com
-    description: Render (production)
-  - url: http://localhost:8080
-    description: Local
   - url: https://api.trendsocial.com
-    description: (placeholder)
+    description: Production
 
 tags:
   - name: Auth

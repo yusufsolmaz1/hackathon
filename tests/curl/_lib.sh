@@ -1,74 +1,103 @@
 #!/usr/bin/env bash
 # Shared helpers for curl smoke tests.
-# Source from script root: . "$(dirname "$0")/_lib.sh"
+# Usage:
+#   source ./_lib.sh
+#   BASE=${BASE:-http://localhost:8080}
+#   register "$NAME" "$EMAIL" "$PASS"   → sets TOKEN, USER_ID
+#   login_as "$EMAIL" "$PASS"           → sets TOKEN, USER_ID
+#   req METHOD PATH [BODY]              → curl with auth header
 
 set -u
-BASE="${BASE:-http://localhost:8080}"
+PASSED=0
+FAILED=0
+BASE=${BASE:-http://localhost:8080}
+TOKEN=${TOKEN:-}
+USER_ID=${USER_ID:-}
+TIMEOUT=${TIMEOUT:-25}
 
-# .env'i otomatik yükle (Supabase seed scriptleri için)
-if [[ -z "${SUPABASE_URL:-}" ]] && [[ -f "$(dirname "${BASH_SOURCE[0]}")/../../.env" ]]; then
-    set -a
-    # shellcheck disable=SC1091
-    source "$(dirname "${BASH_SOURCE[0]}")/../../.env"
-    set +a
-fi
+C_RED='\033[0;31m'; C_GRN='\033[0;32m'; C_YEL='\033[1;33m'; C_RST='\033[0m'
 
-# Renkli çıktı (terminal değilse no-op)
-if [[ -t 1 ]]; then
-    GREEN='\033[0;32m'; RED='\033[0;31m'; YELLOW='\033[0;33m'; BOLD='\033[1m'; NC='\033[0m'
-else
-    GREEN=''; RED=''; YELLOW=''; BOLD=''; NC=''
-fi
-
-PASS=0; FAIL=0
-
-section() { printf "\n${BOLD}==> %s${NC}\n" "$1"; }
-ok()      { printf "  ${GREEN}✓${NC} %s\n" "$1"; PASS=$((PASS+1)); }
-fail()    { printf "  ${RED}✗${NC} %s\n" "$1"; FAIL=$((FAIL+1)); }
-note()    { printf "  ${YELLOW}·${NC} %s\n" "$1"; }
-
-# usage: assert_status <expected> <actual> <message>
 assert_status() {
-    local expected=$1 actual=$2 msg=$3
-    if [[ "$actual" == "$expected" ]]; then
-        ok "$msg → HTTP $actual"
+    local got="$1" want="$2" label="$3"
+    if [ "$got" = "$want" ]; then
+        echo -e "${C_GRN}✓${C_RST} $label ($got)"
+        PASSED=$((PASSED + 1))
     else
-        fail "$msg → HTTP $actual (expected $expected)"
+        echo -e "${C_RED}✗${C_RST} $label (got $got, want $want)"
+        FAILED=$((FAILED + 1))
     fi
 }
 
-# usage: http_get <path> [header...]   →  echoes "BODY|||STATUS"
-http_get() {
-    local path=$1; shift
-    local headers=()
-    while (( $# )); do headers+=(-H "$1"); shift; done
-    curl -s -w "|||%{http_code}" "${BASE}${path}" ${headers[@]+"${headers[@]}"}
+assert_contains() {
+    local body="$1" needle="$2" label="$3"
+    if printf "%s" "$body" | grep -q "$needle"; then
+        echo -e "${C_GRN}✓${C_RST} $label"
+        PASSED=$((PASSED + 1))
+    else
+        echo -e "${C_RED}✗${C_RST} $label (missing: $needle)"
+        echo "    body: $(printf "%s" "$body" | head -c 200)"
+        FAILED=$((FAILED + 1))
+    fi
 }
 
-http_post() {
-    local path=$1 body=$2; shift 2
-    local headers=(-H "Content-Type: application/json")
-    while (( $# )); do headers+=(-H "$1"); shift; done
-    curl -s -w "|||%{http_code}" -X POST "${BASE}${path}" "${headers[@]}" -d "$body"
+# Generic auth'd request: req METHOD PATH [BODY] → echoes body, sets HTTP_CODE
+req() {
+    local method="$1" path="$2" body="${3:-}"
+    local args=(-sS -X "$method" -m "$TIMEOUT" -w "\n%{http_code}" -H "Content-Type: application/json")
+    [ -n "$TOKEN" ] && args+=(-H "Authorization: Bearer $TOKEN")
+    [ -n "$body" ] && args+=(-d "$body")
+    local raw
+    raw=$(curl "${args[@]}" "$BASE$path")
+    HTTP_CODE=$(printf "%s" "$raw" | tail -n1)
+    printf "%s" "$raw" | sed '$d'
 }
 
-http_delete() {
-    local path=$1; shift
-    local headers=()
-    while (( $# )); do headers+=(-H "$1"); shift; done
-    curl -s -w "|||%{http_code}" -X DELETE "${BASE}${path}" ${headers[@]+"${headers[@]}"}
+# Auth-less variant for register/login
+req_anon() {
+    local method="$1" path="$2" body="${3:-}"
+    local args=(-sS -X "$method" -m "$TIMEOUT" -w "\n%{http_code}" -H "Content-Type: application/json")
+    [ -n "$body" ] && args+=(-d "$body")
+    local raw
+    raw=$(curl "${args[@]}" "$BASE$path")
+    HTTP_CODE=$(printf "%s" "$raw" | tail -n1)
+    printf "%s" "$raw" | sed '$d'
 }
 
-# split "BODY|||STATUS"
-body_of()   { echo "${1%|||*}"; }
-status_of() { echo "${1##*|||}"; }
+register() {
+    local name="$1" email="$2" pass="$3"
+    local body
+    body=$(req_anon POST /auth/register "{\"name\":\"$name\",\"email\":\"$email\",\"password\":\"$pass\"}")
+    if [ "$HTTP_CODE" = "201" ]; then
+        TOKEN=$(printf "%s" "$body" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
+        USER_ID=$(printf "%s" "$body" | sed -n 's/.*"id":"\(usr_[^"]*\)".*/\1/p' | head -n1)
+    else
+        echo "register failed ($HTTP_CODE): $body" >&2
+        return 1
+    fi
+}
 
-# usage: jpath <json> <python-expression-on-d>
-jpath() {
-    python3 -c "import json,sys;d=json.loads(sys.argv[1]);print($2)" "$1"
+login_as() {
+    local email="$1" pass="$2"
+    local body
+    body=$(req_anon POST /auth/login "{\"email\":\"$email\",\"password\":\"$pass\"}")
+    if [ "$HTTP_CODE" = "200" ]; then
+        TOKEN=$(printf "%s" "$body" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
+        USER_ID=$(printf "%s" "$body" | sed -n 's/.*"id":"\(usr_[^"]*\)".*/\1/p' | head -n1)
+    else
+        echo "login failed ($HTTP_CODE): $body" >&2
+        return 1
+    fi
 }
 
 summary() {
-    printf "\n${BOLD}Sonuç:${NC} ${GREEN}%d passed${NC}, ${RED}%d failed${NC}\n" "$PASS" "$FAIL"
-    [[ $FAIL -eq 0 ]] || exit 1
+    echo
+    echo "─────────────────────────────────────"
+    echo -e "  ${C_GRN}passed: $PASSED${C_RST}    ${C_RED}failed: $FAILED${C_RST}"
+    echo "─────────────────────────────────────"
+    [ "$FAILED" -eq 0 ]
+}
+
+# Random suffix for unique emails
+rand_suffix() {
+    printf "%s%04d" "$(date +%s)" "$RANDOM" | tail -c 10
 }
