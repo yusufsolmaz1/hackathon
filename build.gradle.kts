@@ -35,7 +35,6 @@ dependencies {
     implementation("io.ktor:ktor-serialization-kotlinx-json:$ktor_version")
     implementation("io.ktor:ktor-server-status-pages:$ktor_version")
     implementation("io.ktor:ktor-server-call-logging:$ktor_version")
-    implementation("io.ktor:ktor-server-config-yaml:$ktor_version")
 
     // Supabase
     implementation(platform("io.github.jan-tennert.supabase:bom:$supabase_version"))
