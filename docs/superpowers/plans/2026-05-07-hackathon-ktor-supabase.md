@@ -615,7 +615,7 @@ import com.hackathon.routes.itemRoutes
 import com.hackathon.service.ItemService
 import io.ktor.server.application.Application
 import io.ktor.server.netty.EngineMain
-import io.ktor.server.plugins.callloging.CallLogging
+import io.ktor.server.plugins.calllogging.CallLogging
 import io.ktor.server.application.install
 import io.ktor.server.response.respond
 import io.ktor.server.routing.get
