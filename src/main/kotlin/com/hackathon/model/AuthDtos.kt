@@ -11,13 +11,19 @@ import kotlinx.serialization.Serializable
 data class LoginRequest(val email: String, val password: String)
 
 @Serializable
-data class RegisterRequest(val name: String, val email: String, val password: String)
+data class RegisterRequest(
+    val name: String,
+    val email: String,
+    val password: String,
+    val birthday: String? = null,        // ISO 8601 datetime, opsiyonel
+)
 
 @Serializable
 data class UpdateProfileRequest(
     val name: String? = null,
     val email: String? = null,
     @SerialName("avatar_url") val avatarUrl: String? = null,
+    val birthday: String? = null,        // ISO 8601 datetime
 )
 
 // ───── Response DTOs ─────
@@ -28,6 +34,7 @@ data class UserProfile(
     val name: String,
     val email: String,
     @SerialName("avatar_url") val avatarUrl: String? = null,
+    val birthday: String? = null,        // ISO 8601 datetime; null ise henuz girilmemis
 )
 
 @Serializable
@@ -45,6 +52,7 @@ data class UserRow(
     @SerialName("avatar_url") val avatarUrl: String? = null,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     @SerialName("avatar_color_name") val avatarColorName: String = "blue",
+    val birthday: String? = null,        // ISO 8601 datetime
 )
 
 @Serializable

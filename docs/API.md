@@ -12,9 +12,11 @@ Tüm endpoint'ler (login/register hariç) `Authorization: Bearer <token>` ister.
 | Method | Path | Desc |
 |---|---|---|
 | POST | `/auth/login` | E-posta + şifre ile giriş, token döner |
-| POST | `/auth/register` | Yeni kullanıcı oluştur, token döner (201) |
-| GET  | `/auth/profile` | Mevcut kullanıcı profilini döndür |
-| PUT  | `/auth/profile` | Profil günceller (name, email, avatar_url) |
+| POST | `/auth/register` | Yeni kullanıcı oluştur, token döner (201). Opsiyonel `birthday` (ISO 8601). |
+| GET  | `/auth/profile` | Mevcut kullanıcı profilini döndür (`birthday` dahil) |
+| PUT  | `/auth/profile` | Profil günceller (name, email, avatar_url, birthday) |
+
+`birthday` formatı ISO 8601 — örn. `"1998-05-15T00:00:00Z"`. Yalnızca tarih (`"1998-05-15"`) gönderilirse UTC midnight olarak normalize edilir. Geçersiz formatta `400 INVALID_DATE` döner.
 
 ## Products
 

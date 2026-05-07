@@ -42,6 +42,9 @@ class TrendException(
 
         fun productNotFound(msg: String = "Urun bulunamadi.") =
             TrendException(HttpStatusCode.NotFound, "PRODUCT_NOT_FOUND", msg)
+
+        fun invalidDate(msg: String = "Dogum gunu ISO 8601 formatinda olmalidir.") =
+            TrendException(HttpStatusCode.BadRequest, "INVALID_DATE", msg)
     }
 }
 

@@ -34,6 +34,7 @@ create table users (
     name text not null,
     avatar_url text,
     avatar_color_name text default 'blue',
+    birthday timestamptz,               -- ISO 8601 datetime; null ise henuz girilmemis
     created_at timestamptz default now()
 );
 

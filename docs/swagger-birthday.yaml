@@ -1,0 +1,229 @@
+openapi: 3.0.3
+info:
+  title: TrendSocial API - Birthday Endpoints
+  description: Kullanıcı doğum günü bilgisi ile ilgili endpoint'ler
+  version: 1.0.0
+
+servers:
+  - url: https://api.trendsocial.com
+
+paths:
+  /auth/register:
+    post:
+      tags:
+        - Auth
+      summary: Yeni kullanıcı kaydı
+      description: Kullanıcıyı kaydeder. Doğum günü bilgisi opsiyoneldir.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            example:
+              name: "Burak Filiz"
+              email: "burak@example.com"
+              password: "securePass123"
+              birthday: "1998-05-15T00:00:00Z"
+      responses:
+        '201':
+          description: Kayıt başarılı
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Geçersiz istek (eksik alan, geçersiz email formatı)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "invalid_request"
+                message: "Email formatı geçersiz."
+        '409':
+          description: Email zaten kayıtlı
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "email_exists"
+                message: "Bu email adresi ile kayıtlı bir hesap bulunmaktadır."
+
+  /auth/profile:
+    get:
+      tags:
+        - Auth
+      summary: Kullanıcı profilini getir
+      description: Giriş yapmış kullanıcının profil bilgilerini döner (doğum günü dahil).
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Profil bilgileri
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        '401':
+          description: Yetkisiz erişim
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      tags:
+        - Auth
+      summary: Kullanıcı profilini güncelle
+      description: Profil bilgilerini günceller. Sadece gönderilen alanlar güncellenir. Doğum günü bir kez ayarlandıktan sonra değiştirilebilir.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+            examples:
+              only_birthday:
+                summary: Sadece doğum günü güncelle
+                value:
+                  birthday: "1998-05-15T00:00:00Z"
+              full_update:
+                summary: Tüm alanları güncelle
+                value:
+                  name: "Burak F."
+                  email: "burak.new@example.com"
+                  avatar_url: "https://cdn.trendsocial.com/avatars/123.jpg"
+                  birthday: "1998-05-15T00:00:00Z"
+      responses:
+        '200':
+          description: Güncelleme başarılı
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        '400':
+          description: Geçersiz tarih formatı
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "invalid_date"
+                message: "Doğum günü ISO 8601 formatında olmalıdır."
+        '401':
+          description: Yetkisiz erişim
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    RegisterRequest:
+      type: object
+      required:
+        - name
+        - email
+        - password
+      properties:
+        name:
+          type: string
+          description: Kullanıcı adı soyadı
+          example: "Burak Filiz"
+        email:
+          type: string
+          format: email
+          description: Email adresi
+          example: "burak@example.com"
+        password:
+          type: string
+          format: password
+          minLength: 6
+          description: Şifre (minimum 6 karakter)
+          example: "securePass123"
+        birthday:
+          type: string
+          format: date-time
+          nullable: true
+          description: Doğum günü (ISO 8601). Opsiyonel.
+          example: "1998-05-15T00:00:00Z"
+
+    UpdateProfileRequest:
+      type: object
+      description: Güncellenecek alanlar. Gönderilmeyen alanlar değişmez.
+      properties:
+        name:
+          type: string
+          nullable: true
+          example: "Burak F."
+        email:
+          type: string
+          format: email
+          nullable: true
+          example: "burak.new@example.com"
+        avatar_url:
+          type: string
+          format: uri
+          nullable: true
+          example: "https://cdn.trendsocial.com/avatars/123.jpg"
+        birthday:
+          type: string
+          format: date-time
+          nullable: true
+          description: Doğum günü (ISO 8601)
+          example: "1998-05-15T00:00:00Z"
+
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: JWT access token
+          example: "eyJhbGciOiJIUzI1NiIs..."
+        user:
+          $ref: '#/components/schemas/UserProfile'
+
+    UserProfile:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Kullanıcı ID
+          example: "usr_abc123"
+        name:
+          type: string
+          description: Kullanıcı adı soyadı
+          example: "Burak Filiz"
+        email:
+          type: string
+          format: email
+          example: "burak@example.com"
+        avatar_url:
+          type: string
+          format: uri
+          nullable: true
+          example: "https://cdn.trendsocial.com/avatars/123.jpg"
+        birthday:
+          type: string
+          format: date-time
+          nullable: true
+          description: Kullanıcının doğum günü. Null ise henüz girilmemiş.
+          example: "1998-05-15T00:00:00Z"
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Hata kodu
+          example: "invalid_request"
+        message:
+          type: string
+          description: Kullanıcıya gösterilebilir hata mesajı
+          example: "Geçersiz istek."

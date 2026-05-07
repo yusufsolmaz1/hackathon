@@ -25,11 +25,13 @@ open class UserRepository(private val supabase: SupabaseClient) {
         name: String?,
         email: String?,
         avatarUrl: String?,
+        birthday: String?,
     ): UserRow {
         val patch = buildJsonObject {
             if (name != null) put("name", JsonPrimitive(name))
             if (email != null) put("email", JsonPrimitive(email))
             if (avatarUrl != null) put("avatar_url", JsonPrimitive(avatarUrl))
+            if (birthday != null) put("birthday", JsonPrimitive(birthday))
         }
         return supabase.from(users).update(patch) {
             select()

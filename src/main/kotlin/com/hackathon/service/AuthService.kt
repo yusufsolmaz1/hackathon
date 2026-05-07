@@ -16,6 +16,21 @@ class AuthService(private val userRepo: UserRepository) {
 
     private val emailRegex = Regex("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")
 
+    private fun validateBirthday(value: String?): String? {
+        if (value.isNullOrBlank()) return null
+        return try {
+            java.time.OffsetDateTime.parse(value).toString()
+        } catch (_: Exception) {
+            try {
+                // Tolerate plain "1998-05-15" → midnight UTC
+                val date = java.time.LocalDate.parse(value)
+                date.atStartOfDay(java.time.ZoneOffset.UTC).toOffsetDateTime().toString()
+            } catch (_: Exception) {
+                throw TrendException.invalidDate()
+            }
+        }
+    }
+
     suspend fun login(req: LoginRequest): AuthResponse {
         if (req.email.isBlank() || req.password.isBlank()) {
             throw TrendException.badRequest("E-posta ve sifre gereklidir.")
@@ -39,6 +54,7 @@ class AuthService(private val userRepo: UserRepository) {
 
         if (userRepo.findByEmail(email) != null) throw TrendException.emailExists()
 
+        val birthday = validateBirthday(req.birthday)
         val user = UserRow(
             id = newUserId(),
             email = email,
@@ -46,6 +62,7 @@ class AuthService(private val userRepo: UserRepository) {
             name = name,
             avatarUrl = null,
             avatarColorName = pickColor(name),
+            birthday = birthday,
         )
         val saved = userRepo.create(user)
         val token = newToken()
@@ -66,16 +83,18 @@ class AuthService(private val userRepo: UserRepository) {
             val existing = userRepo.findByEmail(req.email.lowercase())
             if (existing != null && existing.id != userId) throw TrendException.emailExists()
         }
+        val birthday = validateBirthday(req.birthday)
         val updated = userRepo.updateProfile(
             id = userId,
             name = req.name?.takeIf { it.isNotBlank() }?.trim(),
             email = req.email?.lowercase(),
             avatarUrl = req.avatarUrl,
+            birthday = birthday,
         )
         return updated.toProfile()
     }
 
-    private fun UserRow.toProfile() = UserProfile(id, name, email, avatarUrl)
+    private fun UserRow.toProfile() = UserProfile(id, name, email, avatarUrl, birthday)
 
     private fun pickColor(seed: String): String {
         val palette = listOf("orange", "blue", "green", "purple", "pink", "brown", "red", "teal")

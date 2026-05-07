@@ -36,9 +36,22 @@ body=$(req GET /auth/profile)
 assert_status "$HTTP_CODE" 401 "profile without token → 401"
 TOKEN="$SAVED_TOKEN"
 
-# profile update
-body=$(req PUT /auth/profile '{"name":"Updated Name"}')
+# profile update (with birthday)
+body=$(req PUT /auth/profile '{"name":"Updated Name","birthday":"1998-05-15T00:00:00Z"}')
 assert_status "$HTTP_CODE" 200 "profile PUT → 200"
 assert_contains "$body" "Updated Name" "profile name updated"
+assert_contains "$body" "1998-05-15" "birthday persisted"
+
+# bad birthday
+body=$(req PUT /auth/profile '{"birthday":"not-a-date"}')
+assert_status "$HTTP_CODE" 400 "bad birthday → 400"
+assert_contains "$body" "INVALID_DATE" "error code INVALID_DATE"
+
+# register with birthday
+SUFFIX2=$(rand_suffix)
+EMAIL2="bday_${SUFFIX2}@test.com"
+body=$(req_anon POST /auth/register "{\"name\":\"BDay $SUFFIX2\",\"email\":\"$EMAIL2\",\"password\":\"Sifre123!\",\"birthday\":\"2000-01-01T00:00:00Z\"}")
+assert_status "$HTTP_CODE" 201 "register with birthday → 201"
+assert_contains "$body" "2000-01-01" "register response includes birthday"
 
 summary
