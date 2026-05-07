@@ -27,6 +27,10 @@ import kotlin.test.assertEquals
  * Uses a hand-rolled fake repository by subclassing.
  * Avoids hitting real Supabase during unit tests.
  *
+ * IMPORTANT: every `open` method on [ItemRepository] MUST be overridden here.
+ * If a new `open suspend fun` is added upstream and not overridden, the fake
+ * silently falls through to the real impl and tries to hit https://stub.invalid.
+ *
  * TODO: Add integration tests against a real Supabase test project.
  */
 private class FakeItemRepository : ItemRepository(
