@@ -1,0 +1,16 @@
+.gradle/
+.kotlin/
+build/
+out/
+.idea/
+.vscode/
+.git/
+*.iml
+.env
+.env.local
+.DS_Store
+*.log
+docs/
+tests/
+db/
+README.md

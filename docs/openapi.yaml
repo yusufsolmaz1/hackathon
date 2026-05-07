@@ -1,0 +1,590 @@
+openapi: 3.0.3
+info:
+  title: Hackathon BFF API
+  version: 0.0.1
+  description: |
+    Split Payment + Friends + Order detail BFF.
+
+    **Production'daki base URL ayrımı (MultiDC remote-config anahtarları):**
+    - `AndroidSplitPaymentBaseUrl` → `/split-payment/*`
+    - `AndroidFriendsBaseUrl`      → `/friends/*`
+
+    Bu hackathon implementasyonunda her iki BFF aynı Ktor sunucusunda
+    farklı prefix'ler altında host ediliyor.
+  contact:
+    name: Backend
+    email: backend@example.com
+
+servers:
+  - url: http://localhost:8080
+    description: Local dev
+  - url: https://{androidSplitPaymentBaseUrl}
+    description: Split Payment BFF (prod, MultiDC)
+    variables:
+      androidSplitPaymentBaseUrl: { default: split.example.com }
+  - url: https://{androidFriendsBaseUrl}
+    description: Friends BFF (prod, MultiDC)
+    variables:
+      androidFriendsBaseUrl: { default: friends.example.com }
+
+tags:
+  - { name: Health, description: Liveness probe }
+  - { name: SplitPayment, description: Ortak Ödeme — initiate / pay / track / cancel }
+  - { name: Friends, description: Arkadaş listesi yönetimi }
+  - { name: Orders, description: Sipariş detayı (split chip için tek alan eklendi) }
+  - { name: Items, description: Mevcut item CRUD (orijinal scope) }
+
+# =====================================================================
+# Paths
+# =====================================================================
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Liveness probe
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { status: { type: string, example: ok } }
+
+  # -------------------- Split Payment --------------------
+
+  /split-payment/initiate:
+    post:
+      tags: [SplitPayment]
+      summary: 1.1 Split intent oluştur
+      description: |
+        Initiator checkout'ta "Ortak Öde"'yi seçip katılımcıları belirledikten
+        sonra çağırır. Server `splitId` döner.
+
+        **Validation:**
+        - Tam olarak 1 katılımcı `isInitiator=true` olmalı
+        - `participants[].shareKurus` toplamı `totalKurus`'a eşit olmalı
+          (hem EQUAL hem CUSTOM modunda doğrulanır)
+        - `participantId` listesinde duplicate olmamalı
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InitiateSplitRequestDto' }
+            examples:
+              equal:
+                summary: EQUAL split — 3 kişi 12.000 kr
+                value:
+                  totalKurus: 12000
+                  splitMethod: EQUAL
+                  participants:
+                    - { participantId: u_self, shareKurus: 4000, isInitiator: true }
+                    - { participantId: u_42,   shareKurus: 4000, isInitiator: false }
+                    - { participantId: u_99,   shareKurus: 4000, isInitiator: false }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InitiateSplitResponseDto' }
+        '400': { $ref: '#/components/responses/Validation' }
+
+  /split-payment/initiator-pay/{splitId}:
+    post:
+      tags: [SplitPayment]
+      summary: 1.2 Initiator kendi payını ödedi
+      description: |
+        Initiator checkout'u tamamlayıp gerçek `orderId` aldıktan sonra çağırır.
+        Server payı kilitler (PAID), katılımcılara push/sms gönderir ve tracking
+        deeplink'i döner. `orders.split_id` da denormalize olarak set edilir
+        (sipariş detay chip'i için).
+      parameters:
+        - $ref: '#/components/parameters/SplitId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InitiatorPayRequestDto' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InitiatorPayResponseDto' }
+        '400': { $ref: '#/components/responses/Validation' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /split-payment/request/{splitId}/{participantId}:
+    get:
+      tags: [SplitPayment]
+      summary: 1.3 Katılımcı request ekranı için detay
+      parameters:
+        - $ref: '#/components/parameters/SplitId'
+        - $ref: '#/components/parameters/ParticipantId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SplitPaymentRequestResponseDto' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /split-payment/reject/{splitId}:
+    post:
+      tags: [SplitPayment]
+      summary: 1.4 Katılımcı payını reddet
+      description: |
+        Katılımcı payment-request ekranından veya tracking ekranından (Epic 4.2b)
+        kendi payını reddeder. PAID statüsündeki katılımcı reject yapamaz (400).
+      parameters:
+        - $ref: '#/components/parameters/SplitId'
+        - $ref: '#/components/parameters/XUserId'
+      responses:
+        '204': { description: No content }
+        '400': { $ref: '#/components/responses/Validation' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /split-payment/{splitId}:
+    get:
+      tags: [SplitPayment]
+      summary: 1.5 Tracking — Bekleme Odası (20s polling)
+      description: |
+        `role` viewer'a göre INITIATOR / PARTICIPANT döner.
+        `expiresAtMillis` mutlak epoch ms (process death dirençli).
+      parameters:
+        - $ref: '#/components/parameters/SplitId'
+        - $ref: '#/components/parameters/XUserId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SplitPaymentTrackingDto' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /split-payment/{splitId}/remind/{participantId}:
+    post:
+      tags: [SplitPayment]
+      summary: 1.6 Initiator katılımcıya hatırlatma push'ı yollar
+      description: Sadece PENDING statüdeki katılımcılar hatırlatılabilir.
+      parameters:
+        - $ref: '#/components/parameters/SplitId'
+        - $ref: '#/components/parameters/ParticipantId'
+      responses:
+        '204': { description: No content }
+        '400': { $ref: '#/components/responses/Validation' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /split-payment/{splitId}/cancel:
+    post:
+      tags: [SplitPayment]
+      summary: 1.7 Initiator split'i iptal eder
+      description: |
+        Polling iptal edilmeli, ekran kapatılmalı. Zaten CANCELLED/COMPLETED/EXPIRED
+        olan split tekrar iptal edilemez (400).
+      parameters:
+        - $ref: '#/components/parameters/SplitId'
+      responses:
+        '204': { description: No content }
+        '400': { $ref: '#/components/responses/Validation' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # -------------------- Friends --------------------
+
+  /friends:
+    get:
+      tags: [Friends]
+      summary: 2.1 Arkadaş listesi
+      parameters: [{ $ref: '#/components/parameters/XUserId' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FriendsListResponseDto' }
+
+  /friends/add:
+    post:
+      tags: [Friends]
+      summary: 2.2 E-posta ile arkadaş ekle
+      description: |
+        Hata durumunda response body **FriendsErrorResponseDto** formatındadır
+        (genel ErrorResponse değil). Client `errorCode` set'ini sealed
+        `FriendsError` tipine maple eder.
+
+        | errorCode        | HTTP | Anlamı                              |
+        |------------------|------|-------------------------------------|
+        | `INVALID_EMAIL`  | 400  | Geçersiz e-posta formatı            |
+        | `SELF_ADD`       | 400  | Kendini eklemeye çalıştı            |
+        | `USER_NOT_FOUND` | 404  | E-postaya karşılık kullanıcı yok    |
+        | `ALREADY_FRIEND` | 409  | Zaten arkadaş listesinde            |
+      parameters: [{ $ref: '#/components/parameters/XUserId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AddFriendRequestDto' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AddFriendResponseDto' }
+        '400':
+          description: INVALID_EMAIL veya SELF_ADD
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FriendsErrorResponseDto' }
+        '404':
+          description: USER_NOT_FOUND
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FriendsErrorResponseDto' }
+        '409':
+          description: ALREADY_FRIEND
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FriendsErrorResponseDto' }
+
+  /friends/{friendId}:
+    delete:
+      tags: [Friends]
+      summary: 2.3 Arkadaşı sil (bidirectional)
+      parameters:
+        - { $ref: '#/components/parameters/XUserId' }
+        - { name: friendId, in: path, required: true, schema: { type: string }, example: u_42 }
+      responses:
+        '204': { description: No content }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # -------------------- Orders --------------------
+
+  /orders/{id}:
+    get:
+      tags: [Orders]
+      summary: 3 Sipariş detayı (paymentInfo.splitId opsiyonel chip alanı içerir)
+      description: |
+        Mevcut endpoint; **yeni alan: `paymentInfo.splitId`** (opsiyonel,
+        nullable, default null). Split kapsamında oluşturulmuş siparişlerde
+        dolu döner; client `ty://?Page=OrtakOdemeTakip&SplitId=<id>&OrderId=<orderId>`
+        deeplink'i ile chip render eder. Geriye dönük uyumlu.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string }, example: ORD-7700219 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderDetailDto' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # -------------------- Items (mevcut, orijinal scope) --------------------
+
+  /items:
+    get:
+      tags: [Items]
+      summary: List items
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Item' } }
+    post:
+      tags: [Items]
+      summary: Create item
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/Item' } } }
+      responses:
+        '201':
+          description: Created
+          content: { application/json: { schema: { $ref: '#/components/schemas/Item' } } }
+        '400': { $ref: '#/components/responses/Validation' }
+
+  /items/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Items]
+      summary: Get item
+      responses:
+        '200':
+          description: OK
+          content: { application/json: { schema: { $ref: '#/components/schemas/Item' } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Items]
+      summary: Update item
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/Item' } } }
+      responses:
+        '200':
+          description: OK
+          content: { application/json: { schema: { $ref: '#/components/schemas/Item' } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Items]
+      summary: Delete item
+      responses:
+        '204': { description: No content }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+# =====================================================================
+# Components
+# =====================================================================
+components:
+
+  parameters:
+    SplitId:
+      name: splitId
+      in: path
+      required: true
+      schema: { type: string, example: sp_8f3c7ab2 }
+    ParticipantId:
+      name: participantId
+      in: path
+      required: true
+      schema: { type: string, example: u_42 }
+    XUserId:
+      name: X-User-Id
+      in: header
+      required: true
+      description: |
+        Hackathon shim'i — gerçek production'da JWT'den çıkarılır.
+        Viewer / caller user identity'sini taşır.
+      schema: { type: string, example: u_self }
+
+  responses:
+    Validation:
+      description: Validation hatası
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example: { error: 'totalKurus must be positive', code: VALIDATION }
+    NotFound:
+      description: Kayıt bulunamadı
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example: { error: 'split sp_x not found', code: NOT_FOUND }
+
+  schemas:
+
+    # ---------- Common ----------
+    ErrorResponse:
+      type: object
+      required: [error, code]
+      properties:
+        error: { type: string }
+        code:
+          type: string
+          enum: [VALIDATION, NOT_FOUND, INTERNAL]
+
+    # ---------- Enums ----------
+    SplitMethod:
+      type: string
+      enum: [EQUAL, CUSTOM]
+    SplitParticipantStatus:
+      type: string
+      enum: [PENDING, PAID, REJECTED, EXPIRED]
+    SplitOverallStatus:
+      type: string
+      enum: [WAITING, COMPLETED, EXPIRED, CANCELLED]
+    SplitRole:
+      type: string
+      enum: [INITIATOR, PARTICIPANT]
+
+    # ---------- 1.1 ----------
+    ParticipantInputDto:
+      type: object
+      required: [participantId, shareKurus]
+      properties:
+        participantId: { type: string, example: u_42 }
+        shareKurus:    { type: integer, format: int64, minimum: 1, example: 4000 }
+        isInitiator:   { type: boolean, default: false }
+
+    InitiateSplitRequestDto:
+      type: object
+      required: [totalKurus, splitMethod, participants]
+      properties:
+        totalKurus:   { type: integer, format: int64, minimum: 1, example: 12000 }
+        splitMethod:  { $ref: '#/components/schemas/SplitMethod' }
+        participants:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/ParticipantInputDto' }
+
+    InitiateSplitResponseDto:
+      type: object
+      required: [splitId]
+      properties:
+        splitId: { type: string, example: sp_8f3c7ab2 }
+
+    # ---------- 1.2 ----------
+    InitiatorPayRequestDto:
+      type: object
+      required: [orderId]
+      properties:
+        orderId: { type: string, example: ORD-7700219 }
+
+    InitiatorPayResponseDto:
+      type: object
+      required: [trackingDeeplink]
+      properties:
+        trackingDeeplink:
+          type: string
+          example: 'ty://?Page=OrtakOdemeTakip&SplitId=sp_8f3c7ab2'
+
+    # ---------- 1.3 ----------
+    SplitProductDto:
+      type: object
+      required: [productId, name, priceKurus]
+      properties:
+        productId:  { type: string, example: p_1 }
+        name:       { type: string, example: Saat }
+        imageUrl:   { type: string, nullable: true }
+        priceKurus: { type: integer, format: int64, example: 12000 }
+
+    SplitPaymentRequestResponseDto:
+      type: object
+      required:
+        [splitId, participantId, initiatorName, shareKurus, totalKurus,
+         splitMethod, status, products]
+      properties:
+        splitId:        { type: string }
+        participantId:  { type: string }
+        initiatorName:  { type: string, example: Berna T. }
+        shareKurus:     { type: integer, format: int64 }
+        totalKurus:     { type: integer, format: int64 }
+        splitMethod:    { $ref: '#/components/schemas/SplitMethod' }
+        status:         { $ref: '#/components/schemas/SplitParticipantStatus' }
+        products:
+          type: array
+          items: { $ref: '#/components/schemas/SplitProductDto' }
+
+    # ---------- 1.5 ----------
+    TrackingInitiatorDto:
+      type: object
+      required: [name, initials]
+      properties:
+        name:     { type: string, example: Berna T. }
+        initials: { type: string, example: BT }
+
+    TrackingParticipantDto:
+      type: object
+      required: [id, name, initials, status, amountKurus]
+      properties:
+        id:          { type: string, example: u_42 }
+        name:        { type: string, example: Ali Y. }
+        initials:    { type: string, example: AY }
+        status:      { $ref: '#/components/schemas/SplitParticipantStatus' }
+        amountKurus: { type: integer, format: int64, example: 4000 }
+
+    SplitPaymentTrackingDto:
+      type: object
+      required:
+        [splitId, role, overallStatus, expiresAtMillis, totalKurus,
+         yourShareKurus, initiator, participants, products]
+      properties:
+        splitId:         { type: string }
+        role:            { $ref: '#/components/schemas/SplitRole' }
+        overallStatus:   { $ref: '#/components/schemas/SplitOverallStatus' }
+        expiresAtMillis:
+          type: integer
+          format: int64
+          description: Mutlak epoch ms; client süreyi lokal hesaplar
+        totalKurus:      { type: integer, format: int64 }
+        yourShareKurus:  { type: integer, format: int64 }
+        initiator:       { $ref: '#/components/schemas/TrackingInitiatorDto' }
+        participants:
+          type: array
+          items: { $ref: '#/components/schemas/TrackingParticipantDto' }
+        products:
+          type: array
+          items: { $ref: '#/components/schemas/SplitProductDto' }
+
+    # ---------- Friends ----------
+    FriendDto:
+      type: object
+      required: [id, name, email, initials]
+      properties:
+        id:        { type: string, example: u_42 }
+        name:      { type: string, example: Ali Yılmaz }
+        email:     { type: string, format: email, example: ali@example.com }
+        initials:  { type: string, example: AY }
+        avatarUrl: { type: string, nullable: true }
+
+    FriendsListResponseDto:
+      type: object
+      required: [friends]
+      properties:
+        friends:
+          type: array
+          items: { $ref: '#/components/schemas/FriendDto' }
+
+    AddFriendRequestDto:
+      type: object
+      required: [email]
+      properties:
+        email: { type: string, format: email, example: yeni@example.com }
+
+    AddFriendResponseDto:
+      type: object
+      required: [friend]
+      properties:
+        friend: { $ref: '#/components/schemas/FriendDto' }
+
+    FriendsErrorResponseDto:
+      type: object
+      required: [errorCode, message]
+      properties:
+        errorCode:
+          type: string
+          enum: [USER_NOT_FOUND, SELF_ADD, ALREADY_FRIEND, INVALID_EMAIL]
+        message: { type: string, example: 'Kullanıcı bulunamadı.' }
+
+    # ---------- Orders ----------
+    OrderDetailPaymentInfoDto:
+      type: object
+      required: [totalPrice, paymentType]
+      properties:
+        cardImageUrl:        { type: string, nullable: true }
+        paymentDescription:  { type: string, nullable: true }
+        totalPrice:          { type: string, example: '120,00 TL' }
+        paymentItems:
+          type: array
+          items: { type: object }
+          default: []
+        paymentType:         { type: string, example: CREDIT_CARD }
+        cobrandedRewardInfo: { type: object, nullable: true }
+        isCargoBundleUsed:   { type: boolean, default: false }
+        umicoInfoItems:
+          type: array
+          items: { type: object }
+          default: []
+        splitId:
+          type: string
+          nullable: true
+          default: null
+          description: |
+            Split kapsamında oluşturulmuş siparişlerde dolu döner.
+            Geriye dönük uyumlu (eski siparişlerde alan bulunmayabilir).
+          example: sp_8f3c7ab2
+
+    OrderDetailDto:
+      type: object
+      required: [id, paymentInfo]
+      properties:
+        id:          { type: string, example: ORD-7700219 }
+        paymentInfo: { $ref: '#/components/schemas/OrderDetailPaymentInfoDto' }
+
+    # ---------- Items (mevcut) ----------
+    Item:
+      type: object
+      required: [name]
+      properties:
+        id:          { type: string, nullable: true }
+        name:        { type: string }
+        description: { type: string, nullable: true }

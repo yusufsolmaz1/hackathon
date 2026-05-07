@@ -1,0 +1,15 @@
+# Render Blueprint — bir kerelik tıklayıp deploy etmek için.
+# Render Dashboard'da "New +" → "Blueprint" → repo'yu seç.
+services:
+  - type: web
+    name: hackathon-bff
+    runtime: docker
+    plan: free
+    region: frankfurt        # tr'ye en yakın free region
+    healthCheckPath: /health
+    envVars:
+      - key: SUPABASE_URL
+        sync: false          # Dashboard'dan manuel set
+      - key: SUPABASE_KEY
+        sync: false          # Dashboard'dan manuel set (service_role)
+      # PORT'u Render otomatik enjekte eder; application.conf okuyor.
