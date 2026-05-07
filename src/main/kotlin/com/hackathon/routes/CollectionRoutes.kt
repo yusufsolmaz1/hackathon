@@ -2,6 +2,7 @@ package com.hackathon.routes
 
 import com.hackathon.config.TrendException
 import com.hackathon.config.requireUserId
+import com.hackathon.model.AddProductsToCollectionRequest
 import com.hackathon.model.CreateCollectionRequest
 import com.hackathon.model.ShareCollectionRequest
 import com.hackathon.repository.UserRepository
@@ -35,6 +36,12 @@ fun Route.collectionRoutes(service: CollectionService, userRepo: UserRepository)
             val id = call.parameters["id"] ?: throw TrendException.badRequest("'id' gereklidir.")
             val req = call.receive<ShareCollectionRequest>()
             call.respond(service.share(userId, id, req))
+        }
+        post("/{id}/products") {
+            val userId = call.requireUserId(userRepo)
+            val id = call.parameters["id"] ?: throw TrendException.badRequest("'id' gereklidir.")
+            val req = call.receive<AddProductsToCollectionRequest>()
+            call.respond(service.addProducts(userId, id, req.productIds))
         }
     }
 }

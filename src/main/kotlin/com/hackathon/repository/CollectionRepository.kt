@@ -40,12 +40,21 @@ open class CollectionRepository(private val supabase: SupabaseClient) {
         supabase.from(collections).insert(row) { select() }.decodeSingle()
 
     open suspend fun listProductIds(collectionId: String): List<String> =
-        supabase.from(collectionProducts).select { filter { eq("collection_id", collectionId) } }
-            .decodeList<CollectionProductRow>().map { it.productId }
+        listProducts(collectionId).map { it.productId }
 
-    open suspend fun addProducts(collectionId: String, productIds: List<String>) {
+    open suspend fun listProducts(collectionId: String): List<CollectionProductRow> =
+        supabase.from(collectionProducts).select { filter { eq("collection_id", collectionId) } }
+            .decodeList<CollectionProductRow>()
+
+    open suspend fun addProducts(collectionId: String, productIds: List<String>, addedBy: String? = null) {
         if (productIds.isEmpty()) return
-        val rows = productIds.distinct().map { CollectionProductRow(collectionId, it) }
+        val rows = productIds.distinct().map { pid ->
+            buildJsonObject {
+                put("collection_id", JsonPrimitive(collectionId))
+                put("product_id", JsonPrimitive(pid))
+                if (addedBy != null) put("added_by", JsonPrimitive(addedBy))
+            }
+        }
         supabase.from(collectionProducts).insert(rows)
     }
 

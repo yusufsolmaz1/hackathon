@@ -91,6 +91,8 @@ create table collections (
 create table collection_products (
     collection_id text references collections(id) on delete cascade,
     product_id text references products(id) on delete cascade,
+    added_by text references users(id) on delete set null,
+    added_at timestamptz default now(),
     primary key (collection_id, product_id)
 );
 
@@ -270,12 +272,12 @@ insert into collections (id, owner_id, name, description, is_shared, image_name)
   ('col_demo01', 'usr_demo01', 'Yaz Tatili Plani', 'Tatil icin alinacaklar', true, 'yaz_tatili'),
   ('col_demo02', 'usr_demo01', 'Favori Ayakkabilar', null, false, 'favori_ayakkabi');
 
-insert into collection_products (collection_id, product_id) values
-  ('col_demo01', 'prd_001'),
-  ('col_demo01', 'prd_007'),
-  ('col_demo02', 'prd_002'),
-  ('col_demo02', 'prd_004'),
-  ('col_demo02', 'prd_015');
+insert into collection_products (collection_id, product_id, added_by) values
+  ('col_demo01', 'prd_001', 'usr_demo01'),
+  ('col_demo01', 'prd_007', 'usr_demo02'),
+  ('col_demo02', 'prd_002', 'usr_demo01'),
+  ('col_demo02', 'prd_004', 'usr_demo01'),
+  ('col_demo02', 'prd_015', 'usr_demo01');
 
 insert into collection_participants (collection_id, user_id) values
   ('col_demo01', 'usr_demo01'),

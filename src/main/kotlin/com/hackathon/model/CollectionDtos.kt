@@ -23,8 +23,23 @@ data class CollectionDetailDto(
     val description: String? = null,
     @SerialName("is_shared") val isShared: Boolean,
     @SerialName("image_name") val imageName: String,
-    val products: List<ProductDto>,
+    val products: List<CollectionProductDto>,
     val participants: List<FriendDto>,
+)
+
+@Serializable
+data class CollectionProductDto(
+    val id: String,
+    val brand: String,
+    val name: String,
+    val rating: Double,
+    @SerialName("review_count") val reviewCount: Int,
+    val price: String,
+    @SerialName("image_name") val imageName: String,
+    @SerialName("is_favorite") val isFavorite: Boolean,
+    @SerialName("added_by_id") val addedById: String? = null,
+    @SerialName("added_by_name") val addedByName: String? = null,
+    @SerialName("added_at") val addedAt: String? = null,
 )
 
 // ───── Request DTOs ─────
@@ -41,6 +56,11 @@ data class CreateCollectionRequest(
 @Serializable
 data class ShareCollectionRequest(
     @SerialName("friend_ids") val friendIds: List<String>,
+)
+
+@Serializable
+data class AddProductsToCollectionRequest(
+    @SerialName("product_ids") val productIds: List<String>,
 )
 
 @Serializable
@@ -65,6 +85,8 @@ data class CollectionRow(
 data class CollectionProductRow(
     @SerialName("collection_id") val collectionId: String,
     @SerialName("product_id") val productId: String,
+    @SerialName("added_by") val addedBy: String? = null,
+    @SerialName("added_at") val addedAt: String? = null,
 )
 
 @Serializable
