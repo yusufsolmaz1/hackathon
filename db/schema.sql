@@ -10,6 +10,7 @@ drop table if exists order_split_participants cascade;
 drop table if exists order_items cascade;
 drop table if exists orders cascade;
 drop table if exists cart_items cascade;
+drop table if exists collection_product_likes cascade;
 drop table if exists collection_participants cascade;
 drop table if exists collection_products cascade;
 drop table if exists collections cascade;
@@ -101,6 +102,16 @@ create table collection_participants (
     user_id text references users(id) on delete cascade,
     primary key (collection_id, user_id)
 );
+
+create table collection_product_likes (
+    collection_id text not null references collections(id) on delete cascade,
+    product_id    text not null references products(id) on delete cascade,
+    user_id       text not null references users(id) on delete cascade,
+    status        text not null check (status in ('liked', 'disliked')),
+    created_at    timestamptz not null default now(),
+    primary key (collection_id, product_id, user_id)
+);
+create index collection_product_likes_idx on collection_product_likes(collection_id, product_id);
 
 ------------------------------------------------------------
 -- 5) Friends (bidirectional — each direction stored)
@@ -197,6 +208,7 @@ alter table product_likes disable row level security;
 alter table collections disable row level security;
 alter table collection_products disable row level security;
 alter table collection_participants disable row level security;
+alter table collection_product_likes disable row level security;
 alter table friends disable row level security;
 alter table cart_items disable row level security;
 alter table orders disable row level security;

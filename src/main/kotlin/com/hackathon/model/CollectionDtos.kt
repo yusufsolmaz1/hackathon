@@ -40,6 +40,24 @@ data class CollectionProductDto(
     @SerialName("added_by_id") val addedById: String? = null,
     @SerialName("added_by_name") val addedByName: String? = null,
     @SerialName("added_at") val addedAt: String? = null,
+    @SerialName("collection_like_count") val collectionLikeCount: Int = 0,
+    @SerialName("collection_dislike_count") val collectionDislikeCount: Int = 0,
+    @SerialName("my_like_status") val myLikeStatus: String = "none",  // liked | disliked | none
+)
+
+@Serializable
+data class CollectionProductLikeRow(
+    @SerialName("collection_id") val collectionId: String,
+    @SerialName("product_id") val productId: String,
+    @SerialName("user_id") val userId: String,
+    val status: String,
+)
+
+@Serializable
+data class CollectionLikeStateDto(
+    val status: String,
+    @SerialName("like_count") val likeCount: Int,
+    @SerialName("dislike_count") val dislikeCount: Int,
 )
 
 // ───── Request DTOs ─────

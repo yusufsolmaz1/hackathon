@@ -1,6 +1,7 @@
 package com.hackathon.repository
 
 import com.hackathon.model.CollectionParticipantRow
+import com.hackathon.model.CollectionProductLikeRow
 import com.hackathon.model.CollectionProductRow
 import com.hackathon.model.CollectionRow
 import io.github.jan.supabase.SupabaseClient
@@ -13,6 +14,7 @@ open class CollectionRepository(private val supabase: SupabaseClient) {
     private val collections = "collections"
     private val collectionProducts = "collection_products"
     private val collectionParticipants = "collection_participants"
+    private val collectionProductLikes = "collection_product_likes"
 
     open suspend fun listOwnedOrParticipating(userId: String): List<CollectionRow> {
         // Owned
@@ -74,5 +76,55 @@ open class CollectionRepository(private val supabase: SupabaseClient) {
     open suspend fun setShared(collectionId: String, isShared: Boolean) {
         val patch = buildJsonObject { put("is_shared", JsonPrimitive(isShared)) }
         supabase.from(collections).update(patch) { filter { eq("id", collectionId) } }
+    }
+
+    // ── per-collection product likes ────────────────────────────────
+
+    open suspend fun listProductLikes(collectionId: String): List<CollectionProductLikeRow> =
+        supabase.from(collectionProductLikes).select { filter { eq("collection_id", collectionId) } }
+            .decodeList<CollectionProductLikeRow>()
+
+    open suspend fun setProductLikeStatus(
+        collectionId: String,
+        productId: String,
+        userId: String,
+        status: String,
+    ) {
+        // Try update first; if no row, insert.
+        val existing = supabase.from(collectionProductLikes).select {
+            filter {
+                eq("collection_id", collectionId)
+                eq("product_id", productId)
+                eq("user_id", userId)
+            }
+        }.decodeList<CollectionProductLikeRow>()
+        if (existing.isNotEmpty()) {
+            val patch = buildJsonObject { put("status", JsonPrimitive(status)) }
+            supabase.from(collectionProductLikes).update(patch) {
+                filter {
+                    eq("collection_id", collectionId)
+                    eq("product_id", productId)
+                    eq("user_id", userId)
+                }
+            }
+        } else {
+            val row = buildJsonObject {
+                put("collection_id", JsonPrimitive(collectionId))
+                put("product_id", JsonPrimitive(productId))
+                put("user_id", JsonPrimitive(userId))
+                put("status", JsonPrimitive(status))
+            }
+            supabase.from(collectionProductLikes).insert(row)
+        }
+    }
+
+    open suspend fun clearProductLike(collectionId: String, productId: String, userId: String) {
+        supabase.from(collectionProductLikes).delete {
+            filter {
+                eq("collection_id", collectionId)
+                eq("product_id", productId)
+                eq("user_id", userId)
+            }
+        }
     }
 }

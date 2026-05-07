@@ -3,11 +3,13 @@ package com.hackathon.service
 import com.hackathon.config.TrendException
 import com.hackathon.config.newCollectionId
 import com.hackathon.model.CollectionDetailDto
+import com.hackathon.model.CollectionLikeStateDto
 import com.hackathon.model.CollectionProductDto
 import com.hackathon.model.CollectionRow
 import com.hackathon.model.CollectionSummaryDto
 import com.hackathon.model.CreateCollectionRequest
 import com.hackathon.model.FriendDto
+import com.hackathon.model.LikeStatusRequest
 import com.hackathon.model.ProductDto
 import com.hackathon.model.ShareCollectionRequest
 import com.hackathon.model.ShareCollectionResponse
@@ -74,10 +76,17 @@ class CollectionService(
         val adderNames: Map<String, String> = adderIds.mapNotNull { uid ->
             userRepo.findById(uid)?.let { uid to it.name }
         }.toMap()
+        // Per-collection like aggregation (single query → group in memory)
+        val allLikes = runCatching { repo.listProductLikes(row.id) }.getOrDefault(emptyList())
+        val likesByProduct = allLikes.groupBy { it.productId }
         val products: List<CollectionProductDto> = productRows.mapNotNull { cpRow ->
             val product: ProductDto =
                 runCatching { productService.getById(userId, cpRow.productId) }.getOrNull()
                     ?: return@mapNotNull null
+            val likes = likesByProduct[cpRow.productId].orEmpty()
+            val likeCount = likes.count { it.status == "liked" }
+            val dislikeCount = likes.count { it.status == "disliked" }
+            val myStatus = likes.firstOrNull { it.userId == userId }?.status ?: "none"
             CollectionProductDto(
                 id = product.id,
                 brand = product.brand,
@@ -90,6 +99,9 @@ class CollectionService(
                 addedById = cpRow.addedBy,
                 addedByName = cpRow.addedBy?.let { adderNames[it] },
                 addedAt = cpRow.addedAt,
+                collectionLikeCount = likeCount,
+                collectionDislikeCount = dislikeCount,
+                myLikeStatus = myStatus,
             )
         }
         val participantIds = repo.listParticipantIds(row.id)
@@ -122,6 +134,41 @@ class CollectionService(
             repo.addProducts(collectionId, valid, addedBy = userId)
         }
         return getDetail(userId, collectionId)
+    }
+
+    suspend fun setProductLike(
+        userId: String,
+        collectionId: String,
+        productId: String,
+        req: LikeStatusRequest,
+    ): CollectionLikeStateDto {
+        val row = repo.findById(collectionId) ?: throw TrendException.notFound("Koleksiyon bulunamadi.")
+        val isOwner = row.ownerId == userId
+        val isParticipant = userId in repo.listParticipantIds(row.id)
+        if (!isOwner && !isParticipant) {
+            throw TrendException.forbidden("Bu koleksiyona like atamazsiniz.")
+        }
+        if (productId !in repo.listProductIds(collectionId)) {
+            throw TrendException.notFound("Urun bu koleksiyonda bulunmuyor.")
+        }
+        val target = req.status.lowercase()
+        if (target !in listOf("liked", "disliked", "none")) {
+            throw TrendException.badRequest("Status 'liked', 'disliked' veya 'none' olmalidir.")
+        }
+        if (target == "none") {
+            repo.clearProductLike(collectionId, productId, userId)
+        } else {
+            repo.setProductLikeStatus(collectionId, productId, userId, target)
+        }
+        val all = repo.listProductLikes(collectionId).filter { it.productId == productId }
+        val likeCount = all.count { it.status == "liked" }
+        val dislikeCount = all.count { it.status == "disliked" }
+        val myStatus = all.firstOrNull { it.userId == userId }?.status ?: "none"
+        return CollectionLikeStateDto(
+            status = myStatus,
+            likeCount = likeCount,
+            dislikeCount = dislikeCount,
+        )
     }
 
     suspend fun share(userId: String, collectionId: String, req: ShareCollectionRequest): ShareCollectionResponse {
