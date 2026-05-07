@@ -27,6 +27,7 @@ class OrderService(
     private val cartRepo: CartRepository,
     private val friendRepo: FriendRepository,
     private val userRepo: UserRepository,
+    private val notificationService: NotificationService,
 ) {
 
     suspend fun list(userId: String): List<OrderSummaryDto> {
@@ -126,6 +127,23 @@ class OrderService(
 
         // Clear consumed cart items
         for (item in selected) cartRepo.delete(item.id)
+
+        // Notifications (fail-soft)
+        if (isSplit) {
+            val owner = userRepo.findById(userId)
+            val ownerName = owner?.name ?: "Bir arkadasin"
+            for (split in splitRows) {
+                if (split.friendId == userId) continue
+                notificationService.notifySplitPaymentReceived(
+                    recipientUserId = split.friendId,
+                    ownerName = ownerName,
+                    orderNumber = savedOrder.orderNumber,
+                    amount = split.amount,
+                )
+            }
+        } else {
+            notificationService.notifyOrderConfirmed(userId, savedOrder.orderNumber)
+        }
 
         return savedOrder.toDetail(itemRows, splitRows)
     }

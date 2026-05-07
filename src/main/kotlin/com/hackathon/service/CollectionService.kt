@@ -20,6 +20,7 @@ class CollectionService(
     private val productRepo: ProductRepository,
     private val userRepo: UserRepository,
     private val productService: ProductService,
+    private val notificationService: NotificationService,
 ) {
 
     suspend fun list(userId: String): List<CollectionSummaryDto> {
@@ -88,9 +89,21 @@ class CollectionService(
     suspend fun share(userId: String, collectionId: String, req: ShareCollectionRequest): ShareCollectionResponse {
         val row = repo.findById(collectionId) ?: throw TrendException.notFound("Koleksiyon bulunamadi.")
         if (row.ownerId != userId) throw TrendException.forbidden("Sadece sahibi paylasabilir.")
+        val existingParticipants = repo.listParticipantIds(collectionId).toSet()
         val validIds = req.friendIds.distinct().filter { userRepo.findById(it) != null && it != userId }
         repo.addParticipants(collectionId, validIds + userId)
         repo.setShared(collectionId, true)
+        // Notify only newly added participants
+        val owner = userRepo.findById(userId)
+        val ownerName = owner?.name ?: "Bir arkadasin"
+        for (fid in validIds) {
+            if (fid in existingParticipants) continue
+            notificationService.notifyCollectionShared(
+                recipientUserId = fid,
+                ownerName = ownerName,
+                collectionName = row.name,
+            )
+        }
         val count = repo.listParticipantIds(collectionId).size
         return ShareCollectionResponse(isShared = true, participantCount = count)
     }

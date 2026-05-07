@@ -5,6 +5,7 @@
 ------------------------------------------------------------
 -- 1) DROP existing
 ------------------------------------------------------------
+drop table if exists notifications cascade;
 drop table if exists order_split_participants cascade;
 drop table if exists order_items cascade;
 drop table if exists orders cascade;
@@ -165,7 +166,26 @@ create table order_split_participants (
 );
 
 ------------------------------------------------------------
--- 8) RLS — disable for hackathon
+-- 8) Notifications
+------------------------------------------------------------
+create table notifications (
+    id text primary key,
+    user_id text not null references users(id) on delete cascade,
+    type text not null check (type in (
+        'order_confirmed','order_shipped','order_delivered',
+        'friend_request',
+        'split_payment_received','split_payment_reminder',
+        'collection_shared'
+    )),
+    title text not null,
+    body text not null,
+    is_read boolean not null default false,
+    created_at timestamptz not null default now()
+);
+create index notifications_user_idx on notifications(user_id, created_at desc);
+
+------------------------------------------------------------
+-- 9) RLS — disable for hackathon
 ------------------------------------------------------------
 alter table users disable row level security;
 alter table sessions disable row level security;
@@ -180,9 +200,10 @@ alter table cart_items disable row level security;
 alter table orders disable row level security;
 alter table order_items disable row level security;
 alter table order_split_participants disable row level security;
+alter table notifications disable row level security;
 
 ------------------------------------------------------------
--- 9) SEED DATA
+-- 10) SEED DATA
 ------------------------------------------------------------
 
 -- Users (password "Sifre123!" → sha256 hex below)

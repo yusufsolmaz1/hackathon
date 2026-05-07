@@ -16,7 +16,10 @@ data class FriendDto(
 // ───── Request DTOs ─────
 
 @Serializable
-data class AddFriendRequest(@SerialName("friend_id") val friendId: String)
+data class AddFriendRequest(
+    val email: String? = null,
+    @SerialName("friend_id") val friendId: String? = null,
+)
 
 @Serializable
 data class SyncFriendsRequest(@SerialName("contact_emails") val contactEmails: List<String>)

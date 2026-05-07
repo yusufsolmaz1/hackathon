@@ -8,7 +8,7 @@ echo
 TOTAL_PASS=0
 TOTAL_FAIL=0
 
-for suite in 00_auth.sh 01_products.sh 02_friends.sh 03_collections.sh 04_cart.sh 05_orders.sh; do
+for suite in 00_auth.sh 01_products.sh 02_friends.sh 03_collections.sh 04_cart.sh 05_orders.sh 06_notifications.sh; do
     out=$(bash "$SCRIPT_DIR/$suite")
     echo "$out"
     p=$(echo "$out" | sed -n 's/.*passed: \([0-9]*\).*/\1/p' | tail -n1)

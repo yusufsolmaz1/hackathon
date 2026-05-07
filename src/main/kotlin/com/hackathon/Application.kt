@@ -6,6 +6,7 @@ import com.hackathon.config.configureSerialization
 import com.hackathon.repository.CartRepository
 import com.hackathon.repository.CollectionRepository
 import com.hackathon.repository.FriendRepository
+import com.hackathon.repository.NotificationRepository
 import com.hackathon.repository.OrderRepository
 import com.hackathon.repository.ProductRepository
 import com.hackathon.repository.UserRepository
@@ -13,12 +14,14 @@ import com.hackathon.routes.authRoutes
 import com.hackathon.routes.cartRoutes
 import com.hackathon.routes.collectionRoutes
 import com.hackathon.routes.friendRoutes
+import com.hackathon.routes.notificationRoutes
 import com.hackathon.routes.orderRoutes
 import com.hackathon.routes.productRoutes
 import com.hackathon.service.AuthService
 import com.hackathon.service.CartService
 import com.hackathon.service.CollectionService
 import com.hackathon.service.FriendService
+import com.hackathon.service.NotificationService
 import com.hackathon.service.OrderService
 import com.hackathon.service.ProductService
 import io.ktor.server.application.Application
@@ -45,14 +48,16 @@ fun Application.module() {
     val collectionRepo = CollectionRepository(supabase)
     val cartRepo = CartRepository(supabase)
     val orderRepo = OrderRepository(supabase)
+    val notificationRepo = NotificationRepository(supabase)
 
     // Services
     val authService = AuthService(userRepo)
     val productService = ProductService(productRepo)
-    val friendService = FriendService(friendRepo, userRepo)
-    val collectionService = CollectionService(collectionRepo, productRepo, userRepo, productService)
+    val notificationService = NotificationService(notificationRepo)
+    val friendService = FriendService(friendRepo, userRepo, notificationService)
+    val collectionService = CollectionService(collectionRepo, productRepo, userRepo, productService, notificationService)
     val cartService = CartService(cartRepo, productRepo)
-    val orderService = OrderService(orderRepo, cartRepo, friendRepo, userRepo)
+    val orderService = OrderService(orderRepo, cartRepo, friendRepo, userRepo, notificationService)
 
     routing {
         get("/health") {
@@ -64,5 +69,6 @@ fun Application.module() {
         collectionRoutes(collectionService, userRepo)
         cartRoutes(cartService, userRepo)
         orderRoutes(orderService, userRepo)
+        notificationRoutes(notificationService, userRepo)
     }
 }

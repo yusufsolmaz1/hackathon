@@ -12,17 +12,30 @@ import com.hackathon.repository.UserRepository
 class FriendService(
     private val friendRepo: FriendRepository,
     private val userRepo: UserRepository,
+    private val notificationService: NotificationService,
 ) {
 
     suspend fun list(userId: String): List<FriendDto> =
         friendRepo.listFriendUsers(userId).map { it.toDto() }
 
     suspend fun add(userId: String, req: AddFriendRequest): FriendDto {
-        val friendId = req.friendId.trim()
-        if (friendId.isBlank()) throw TrendException.badRequest("'friend_id' gereklidir.")
-        if (friendId == userId) throw TrendException.badRequest("Kendinizi arkadas ekleyemezsiniz.")
-        val target = userRepo.findById(friendId) ?: throw TrendException.userNotFound()
-        friendRepo.addBidirectional(userId, friendId)
+        val emailIn = req.email?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
+        val friendIdIn = req.friendId?.trim()?.takeIf { it.isNotEmpty() }
+        if (emailIn == null && friendIdIn == null) {
+            throw TrendException.badRequest("'email' veya 'friend_id' gereklidir.")
+        }
+        val target = when {
+            emailIn != null -> userRepo.findByEmail(emailIn) ?: throw TrendException.userNotFound()
+            else -> userRepo.findById(friendIdIn!!) ?: throw TrendException.userNotFound()
+        }
+        if (target.id == userId) throw TrendException.badRequest("Kendinizi arkadas ekleyemezsiniz.")
+        friendRepo.addBidirectional(userId, target.id)
+        // Notify the added friend
+        val requester = userRepo.findById(userId)
+        notificationService.notifyFriendRequest(
+            recipientUserId = target.id,
+            requesterName = requester?.name ?: "Bir kullanici",
+        )
         return target.toDto()
     }
 
@@ -45,6 +58,11 @@ class FriendService(
             if (!friendRepo.exists(userId, user.id)) {
                 friendRepo.addBidirectional(userId, user.id)
                 added.add(user.toDto())
+                val requester = userRepo.findById(userId)
+                notificationService.notifyFriendRequest(
+                    recipientUserId = user.id,
+                    requesterName = requester?.name ?: "Bir kullanici",
+                )
             }
         }
         return SyncFriendsResponse(added = added, notFound = notFound)

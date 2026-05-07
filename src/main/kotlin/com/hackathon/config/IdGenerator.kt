@@ -22,6 +22,7 @@ fun newCollectionId() = "col_" + randomHex(8)
 fun newFriendEdgeId() = "frn_" + randomHex(8)
 fun newCartItemId() = "crt_" + randomHex(8)
 fun newOrderId() = "ord_" + randomHex(8)
+fun newNotificationId() = "ntf_" + randomHex(8)
 fun newToken() = randomHex(48)
 
 /** ord_xxx için human-readable order_number üretir. */
