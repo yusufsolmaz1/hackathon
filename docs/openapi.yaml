@@ -199,7 +199,7 @@ paths:
                   name: "Siyah V Yaka Askili Midi Boy Viskon Elbise"
                   rating: 4.8
                   review_count: 124
-                  price: "599,99 TL"
+                  price: 599.99
                   image_name: "zara_dress"
                   is_favorite: true
                 - id: "prd_002"
@@ -207,7 +207,7 @@ paths:
                   name: "Air Max 270 Kirmizi Erkek Spor Ayakkabi"
                   rating: 4.9
                   review_count: 856
-                  price: "3.299,00 TL"
+                  price: 3299.00
                   image_name: "nike_shoe"
                   is_favorite: false
         '401':
@@ -1128,9 +1128,10 @@ components:
           type: integer
           example: 124
         price:
-          type: string
-          description: Formatli fiyat (TL cinsinden)
-          example: "599,99 TL"
+          type: number
+          format: double
+          description: Birim fiyat (TL)
+          example: 599.99
         image_name:
           type: string
           example: "zara_dress"

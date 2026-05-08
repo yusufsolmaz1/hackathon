@@ -12,7 +12,7 @@ data class OrderItemDto(
     val name: String,
     val brand: String,
     val quantity: Int,
-    val price: String,
+    val price: Double,
     @SerialName("icon_name") val iconName: String,
 )
 
@@ -20,7 +20,7 @@ data class OrderItemDto(
 data class OrderSummaryDto(
     val id: String,
     @SerialName("order_number") val orderNumber: String,
-    @SerialName("total_price") val totalPrice: String,
+    @SerialName("total_price") val totalPrice: Double,
     val status: String,
     @SerialName("created_at") val createdAt: String,
     @SerialName("estimated_delivery") val estimatedDelivery: String? = null,
@@ -32,7 +32,7 @@ data class OrderSummaryDto(
 data class SplitParticipantDto(
     @SerialName("friend_id") val friendId: String,
     val name: String,
-    val amount: String,
+    val amount: Double,
     @SerialName("has_paid") val hasPaid: Boolean,
 )
 
@@ -40,7 +40,7 @@ data class SplitParticipantDto(
 data class OrderDetailDto(
     val id: String,
     @SerialName("order_number") val orderNumber: String,
-    @SerialName("total_price") val totalPrice: String,
+    @SerialName("total_price") val totalPrice: Double,
     val status: String,
     @SerialName("created_at") val createdAt: String,
     @SerialName("estimated_delivery") val estimatedDelivery: String? = null,
@@ -52,10 +52,10 @@ data class OrderDetailDto(
 @Serializable
 data class SplitStatusDto(
     @SerialName("order_id") val orderId: String,
-    @SerialName("total_price") val totalPrice: String,
+    @SerialName("total_price") val totalPrice: Double,
     val participants: List<SplitParticipantDto>,
-    @SerialName("paid_amount") val paidAmount: String,
-    @SerialName("remaining_amount") val remainingAmount: String,
+    @SerialName("paid_amount") val paidAmount: Double,
+    @SerialName("remaining_amount") val remainingAmount: Double,
     @SerialName("all_paid") val allPaid: Boolean,
 )
 

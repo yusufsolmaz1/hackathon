@@ -63,7 +63,7 @@ class CartService(
     private fun List<CartItemRow>.toResponse(): CartResponse {
         val total = sumOf { it.price * it.quantity }
         val items = map { it.toDto() }
-        return CartResponse(items = items, totalPrice = formatPrice(total), itemCount = sumOf { it.quantity })
+        return CartResponse(items = items, totalPrice = total, itemCount = sumOf { it.quantity })
     }
 
     private fun CartItemRow.toDto() = CartItemDto(
@@ -72,13 +72,8 @@ class CartService(
         brand = brand,
         name = name,
         size = size,
-        price = formatPrice(price),
+        price = price,
         quantity = quantity,
         iconName = iconName,
     )
-
-    private fun formatPrice(value: Double): String {
-        val formatted = String.format(java.util.Locale.US, "%.2f", value).replace('.', ',')
-        return "$formatted TL"
-    }
 }

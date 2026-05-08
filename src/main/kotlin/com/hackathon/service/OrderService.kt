@@ -69,10 +69,10 @@ class OrderService(
         val remaining = (row.totalPrice - paid).coerceAtLeast(0.0)
         return SplitStatusDto(
             orderId = row.id,
-            totalPrice = formatPrice(row.totalPrice),
+            totalPrice = row.totalPrice,
             participants = splits.map { it.toDto() },
-            paidAmount = formatPrice(paid),
-            remainingAmount = formatPrice(remaining),
+            paidAmount = paid,
+            remainingAmount = remaining,
             allPaid = splits.isNotEmpty() && splits.all { it.hasPaid },
         )
     }
@@ -151,7 +151,7 @@ class OrderService(
     private fun OrderRow.toSummary(itemCount: Int) = OrderSummaryDto(
         id = id,
         orderNumber = orderNumber,
-        totalPrice = formatPrice(totalPrice),
+        totalPrice = totalPrice,
         status = status,
         createdAt = createdAt ?: "",
         estimatedDelivery = estimatedDelivery,
@@ -163,7 +163,7 @@ class OrderService(
         OrderDetailDto(
             id = id,
             orderNumber = orderNumber,
-            totalPrice = formatPrice(totalPrice),
+            totalPrice = totalPrice,
             status = status,
             createdAt = createdAt ?: "",
             estimatedDelivery = estimatedDelivery,
@@ -174,11 +174,11 @@ class OrderService(
 
     private fun OrderItemRow.toDto() = OrderItemDto(
         name = name, brand = brand, quantity = quantity,
-        price = formatPrice(price), iconName = iconName,
+        price = price, iconName = iconName,
     )
 
     private fun OrderSplitParticipantRow.toDto() = SplitParticipantDto(
-        friendId = friendId, name = name, amount = formatPrice(amount), hasPaid = hasPaid,
+        friendId = friendId, name = name, amount = amount, hasPaid = hasPaid,
     )
 
     private fun CartItemRow.toOrderItemRow(orderId: String) = OrderItemRow(
@@ -189,9 +189,4 @@ class OrderService(
         price = price,
         iconName = iconName,
     )
-
-    private fun formatPrice(value: Double): String {
-        val formatted = String.format(java.util.Locale.US, "%.2f", value).replace('.', ',')
-        return "$formatted TL"
-    }
 }

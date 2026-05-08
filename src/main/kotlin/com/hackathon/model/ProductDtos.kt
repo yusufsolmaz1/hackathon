@@ -12,7 +12,7 @@ data class ProductDto(
     val name: String,
     val rating: Double,
     @SerialName("review_count") val reviewCount: Int,
-    val price: String,                 // formatted "599,99 TL"
+    val price: Double,
     @SerialName("image_name") val imageName: String,
     @SerialName("is_favorite") val isFavorite: Boolean,
 )

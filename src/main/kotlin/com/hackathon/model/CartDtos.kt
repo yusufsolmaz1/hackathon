@@ -12,7 +12,7 @@ data class CartItemDto(
     val brand: String,
     val name: String,
     val size: String,
-    val price: String,                 // formatted "X,YY TL"
+    val price: Double,
     val quantity: Int,
     @SerialName("icon_name") val iconName: String,
 )
@@ -20,7 +20,7 @@ data class CartItemDto(
 @Serializable
 data class CartResponse(
     val items: List<CartItemDto>,
-    @SerialName("total_price") val totalPrice: String,
+    @SerialName("total_price") val totalPrice: Double,
     @SerialName("item_count") val itemCount: Int,
 )
 

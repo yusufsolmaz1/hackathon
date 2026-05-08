@@ -34,7 +34,7 @@ data class CollectionProductDto(
     val name: String,
     val rating: Double,
     @SerialName("review_count") val reviewCount: Int,
-    val price: String,
+    val price: Double,
     @SerialName("image_name") val imageName: String,
     @SerialName("is_favorite") val isFavorite: Boolean,
     @SerialName("added_by_id") val addedById: String? = null,

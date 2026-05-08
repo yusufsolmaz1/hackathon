@@ -63,14 +63,8 @@ class ProductService(private val productRepo: ProductRepository) {
         name = name,
         rating = rating,
         reviewCount = reviewCount,
-        price = formatPrice(price),
+        price = price,
         imageName = imageName,
         isFavorite = isFavorite,
     )
-
-    private fun formatPrice(value: Double): String {
-        // "599,99 TL" — comma as decimal separator
-        val formatted = String.format(java.util.Locale.US, "%.2f", value).replace('.', ',')
-        return "$formatted TL"
-    }
 }
