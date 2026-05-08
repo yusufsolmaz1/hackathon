@@ -119,7 +119,7 @@ class OrderService(
                     friendId = pid,
                     name = name,
                     amount = share,
-                    hasPaid = false,
+                    hasPaid = (pid == userId),    // siparisi olusturan kendi payini hemen odemis sayilir
                 )
             }
         } else emptyList()
